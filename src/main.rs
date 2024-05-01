@@ -1,4 +1,4 @@
-use okanimoji::{generate_ascii_text, generate_kanji_image};
+use okanimoji::generate_ascii_text;
 use std::error::Error;
 use std::io::{stdin, stdout, Write};
 
@@ -7,10 +7,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         // Prompt for text input
         print!("Enter the text (or 'q' to quit): ");
         stdout().flush()?;
-        // let mut text = String::new();
-        // stdin().read_line(&mut text)?;
-        // text = text.trim().to_string();
-        let text = "おカニ文字";
+        let mut text = String::new();
+        stdin().read_line(&mut text)?;
+        text = text.trim().to_string();
+        // let text = "おカニ文字";
 
         if text.eq_ignore_ascii_case("q") {
             break;
@@ -35,15 +35,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         // Generate ASCII text
         let ascii_text = generate_ascii_text(&text, &font, width)?;
         println!("ASCII Text:\n{}", ascii_text);
-
-        // Generate ASCII image
-        let ascii_image = generate_kanji_image(&text, &font)?;
-        let image_filename = format!("{}_output.png", text);
-        ascii_image.save(&image_filename)?;
-        println!("ASCII Image saved as {}", image_filename);
-
-        println!();
-        return Ok(());
     }
 
     Ok(())

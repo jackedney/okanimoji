@@ -1,4 +1,4 @@
-use image::{ImageBuffer, Rgba, RgbaImage};
+use image::{Rgba, RgbaImage};
 use rusttype::{Font, Scale};
 use std::error::Error;
 
@@ -39,68 +39,66 @@ pub fn generate_kanji_image(
     kanji: &str,
     font: &str,
 ) -> Result<RgbaImage, Box<dyn std::error::Error>> {
+    // Load the OpenType font from file
     let scale = Scale::uniform(64.0);
     let font = load_font(font).unwrap();
 
-    // Calculate the bounding box for each Kanji character
+    // Measure the dimensions of the text
+    let v_metrics = font.v_metrics(scale);
+
     let glyphs: Vec<_> = font
         .layout(kanji, scale, rusttype::point(0.0, 0.0))
         .collect();
-    if glyphs.is_empty() {
-        return Err("No glyph found".into());
-    }
 
-    let mut image_width: u32 = 0;
-    let mut image_height: u32 = 0;
-
-    for glyph in &glyphs {
-        let bb = glyph.pixel_bounding_box().unwrap_or_default();
-        image_width += bb.width() as u32;
-        image_height = image_height.max(bb.height() as u32);
-    }
-
-    // Add padding between glyphs
-    image_width += (glyphs.len() - 1) as u32 * 10;
-
-    println!(
-        "Image width: {}, Image height: {}",
-        image_width, image_height
-    );
-
-    // Create the image buffer
-    let mut image = ImageBuffer::new(image_width, image_height);
-
-    // Render each Kanji character onto the image buffer
-    let mut current_x = 0;
-    for glyph in &glyphs {
-        let bb = glyph.pixel_bounding_box().unwrap_or_default();
-        let glyph_height = bb.height() as i32;
-        let glyph_width = bb.width() as i32;
-
-        // Calculate the vertical offset to center the glyph
-        let vertical_offset = (image_height as i32 - glyph_height) / 2;
-
-        glyph.draw(|x, y, v| {
-            let x = current_x + x as u32;
-            let y = vertical_offset + y as i32;
-            if x >= image_width || y < 0 || y >= image_height as i32 {
-                return;
+    let text_width = glyphs
+        .last()
+        .map(|g| {
+            let mut width = g.position().x + g.unpositioned().h_metrics().advance_width;
+            for (prev, curr) in glyphs.iter().zip(glyphs.iter().skip(1)) {
+                width += font.pair_kerning(scale, prev.id(), curr.id());
             }
-            let color_value = (v * 255.0).ceil() as u8;
-            image.put_pixel(
-                x,
-                y as u32,
-                Rgba([color_value, color_value, color_value, 255]),
-            );
-        });
+            width
+        })
+        .unwrap_or(0.0);
+    let text_height = v_metrics.ascent - v_metrics.descent;
 
-        current_x += glyph_width as u32 + 10; // Add padding between glyphs
+    // Create a new image buffer
+    let mut image = RgbaImage::new(text_width.ceil() as u32, text_height.ceil() as u32);
+
+    // Draw the glyphs onto the image
+    let mut x = 0.0;
+    for (prev, curr) in std::iter::once(None)
+        .chain(glyphs.iter().map(Some))
+        .zip(glyphs.iter())
+    {
+        let y =
+            curr.position().y + v_metrics.ascent + curr.pixel_bounding_box().unwrap().min.y as f32;
+        curr.draw(|gx, gy, gv| {
+            let gx = x + gx as f32;
+            let gy = y + gy as f32;
+            if gy >= 0.0 && gy < image.height() as f32 {
+                let color_value = (gv * 255.0).ceil() as u8;
+                image.put_pixel(
+                    gx as u32,
+                    gy as u32,
+                    Rgba([color_value, color_value, color_value, 255]),
+                );
+            }
+        });
+        x += curr.unpositioned().h_metrics().advance_width;
+        if let Some(prev) = prev {
+            x += font.pair_kerning(scale, prev.id(), curr.id());
+        }
     }
 
     Ok(image)
 }
 
-fn binary_image_to_braille_art(image: &image::DynamicImage, width: u32) -> String {
+fn binary_image_to_braille_art(
+    image: &image::DynamicImage,
+    mut width: u32,
+    max_height: u32,
+) -> String {
     let charset: &[&str] = &[
         " ", "⠁", "⠂", "⠃", "⠄", "⠅", "⠆", "⠇", "⠈", "⠉", "⠊", "⠋", "⠌", "⠍", "⠎", "⠏", "⠐", "⠑",
         "⠒", "⠓", "⠔", "⠕", "⠖", "⠗", "⠘", "⠙", "⠚", "⠛", "⠜", "⠝", "⠞", "⠟", "⠠", "⠡", "⠢", "⠣",
@@ -123,7 +121,9 @@ fn binary_image_to_braille_art(image: &image::DynamicImage, width: u32) -> Strin
     let (image_width, image_height) = grayscale_image.dimensions();
 
     let aspect_ratio = image_width as f32 / image_height as f32;
-    let height = (width as f32 / aspect_ratio / 2.0).ceil() as u32; // Round up the height to ensure enough space
+    let mut height = (width as f32 / aspect_ratio / 2.0).ceil() as u32;
+    height = height.min(max_height);
+    width = (height as f32 * aspect_ratio * 2.0).ceil() as u32;
 
     let scale_x = image_width as f32 / (width * 2) as f32;
     let scale_y = image_height as f32 / (height * 4) as f32;
@@ -156,7 +156,11 @@ fn binary_image_to_braille_art(image: &image::DynamicImage, width: u32) -> Strin
     result
 }
 
-fn binary_image_to_block_art(image: &image::DynamicImage, width: u32) -> String {
+fn binary_image_to_block_art(
+    image: &image::DynamicImage,
+    mut width: u32,
+    max_height: u32,
+) -> String {
     let block_charset: &[&str] = &[
         " ", "▘", "▝", "▀", "▖", "▌", "▞", "▛", "▗", "▚", "▐", "▜", "▄", "▙", "▟", "█",
     ];
@@ -165,7 +169,9 @@ fn binary_image_to_block_art(image: &image::DynamicImage, width: u32) -> String 
     let (image_width, image_height) = grayscale_image.dimensions();
 
     let aspect_ratio = image_width as f32 / image_height as f32;
-    let height = (width as f32 / aspect_ratio / 2.0).ceil() as u32; // Round up the height to ensure enough space
+    let mut height = (width as f32 / aspect_ratio / 2.0).ceil() as u32;
+    height = height.min(max_height);
+    width = (height as f32 * aspect_ratio * 2.0).ceil() as u32;
 
     let scale_x = image_width as f32 / (width * 2) as f32;
     let scale_y = image_height as f32 / (height * 2) as f32;
@@ -199,8 +205,8 @@ fn binary_image_to_block_art(image: &image::DynamicImage, width: u32) -> String 
 }
 
 fn binary_image_to_braille_block_art(image: &image::DynamicImage, width: u32) -> String {
-    let block_art = binary_image_to_block_art(image, width);
-    let braille_art = binary_image_to_braille_art(image, width);
+    let block_art = binary_image_to_block_art(image, width, 32);
+    let braille_art = binary_image_to_braille_art(image, width, 32);
 
     let mut result = String::new();
 
