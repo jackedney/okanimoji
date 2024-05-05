@@ -15,8 +15,4 @@ Cargo.lock
 
 # Mac OS X
 .DS_Store
-
-# Users should supply their own fonts
-fonts/
-```
     

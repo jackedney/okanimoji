@@ -1,20 +1,42 @@
 use image::{Rgba, RgbaImage};
 use rusttype::{Font, Scale};
+use std::collections::HashMap;
 use std::error::Error;
+use std::fs;
 
-const FONT_DICT: &[(&str, &str)] = &[
-    ("keifont", "./assets/fonts/keifont.ttf"),
-    ("xano", "./assets/fonts/xano.ttf"),
-    ("osaka", "./assets/fonts/osaka.ttc"),
-    ("migu-regular", "./assets/fonts/migu-regular.ttf"),
-    ("migu-bold", "./assets/fonts/migu-bold.ttf"),
-    ("togoshi-gothic", "./assets/fonts/togoshi-gothic.ttf"),
-    ("shippori-bold", "./assets/fonts/shippori-bold.ttf"),
-    ("noto-medium", "./assets/fonts/noto-medium.ttf"),
-];
+const FONT_DIR: &str = "./assets/fonts";
 
-fn load_font(font: &str) -> Result<Font<'static>, Box<dyn Error>> {
-    let font_path = FONT_DICT
+fn generate_font_dict() -> HashMap<String, String> {
+    fs::read_dir(FONT_DIR)
+        .expect("Failed to read font directory")
+        .flat_map(|entry| {
+            let path = entry.expect("Failed to get entry path").path();
+            if path.is_dir() {
+                fs::read_dir(path).expect("Failed to read subdirectory")
+            } else {
+                fs::read_dir(path).unwrap_or_else(|_| {
+                    fs::read_dir(FONT_DIR).expect("Failed to read font directory")
+                })
+            }
+        })
+        .filter_map(|entry| {
+            let path = entry.expect("Failed to get entry path").path();
+            if path.is_file() && path.extension().map_or(false, |ext| ext == "ttf") {
+                path.file_stem()
+                    .and_then(|stem| stem.to_str())
+                    .map(|font_name| (font_name.to_string(), path.to_str().unwrap().to_string()))
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+fn load_font(
+    font: &str,
+    font_dict: HashMap<String, String>,
+) -> Result<Font<'static>, Box<dyn Error>> {
+    let font_path = font_dict
         .iter()
         .find(|(name, _)| name == &font)
         .map(|(_, path)| path);
@@ -41,7 +63,8 @@ pub fn generate_kanji_image(
 ) -> Result<RgbaImage, Box<dyn std::error::Error>> {
     // Load the OpenType font from file
     let scale = Scale::uniform(64.0);
-    let font = load_font(font).unwrap();
+    let font_dict = generate_font_dict();
+    let font = load_font(font, font_dict).unwrap();
 
     // Measure the dimensions of the text
     let v_metrics = font.v_metrics(scale);

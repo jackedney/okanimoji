@@ -1,0 +1,36 @@
+Togoshi Font License
+--------------------
+
+The Togoshi Mincho, Togoshi Mono, and Togoshi Gothic fonts are derived from the Wada Laboratory fonts (Wada Mincho and Wada Gothic). The original Wada Laboratory font license text is as follows:
+
+[Original Japanese text]
+オリジナル和田研フォントのライセンス文書：
+      フォントをそのまま, あるいはフォーマット変換して使用, 
+      配布する場合, 個人, 会社を問わず, こちらの許可は必要
+      ありません. ただ, 配布する場合はそのフォントが
+      ftp.ipl.t.u-tokyo.ac.jpに由来すること, どのような変換
+      をしたかを付記して下さい. フォントはこれからも, バー
+      ジョンアップする予定なので, 末端ユーザが最新のバージョ
+      ンを自分で手に入れられるようにしたいためです.
+
+[English translation]
+Original Wada Laboratory font license document:
+      When using or distributing the font as is, or after format conversion,
+      permission is not required from us, regardless of whether it is for
+      personal or corporate use. However, when distributing, please note
+      that the font originated from ftp.ipl.t.u-tokyo.ac.jp and describe
+      what kind of conversions were made. We plan to continue upgrading
+      the font, so we want end-users to be able to obtain the latest
+      version themselves.
+
+Modifications made to the Togoshi fonts:
+- The Togoshi fonts are based on the Tofu font substitute (OBSOLETE) and have been adjusted using FontForge to modify the glyphs (character shapes) one by one.
+- Kana characters have been slightly thinned compared to the original Tofu font substitute to match the stroke weight of the kanji characters.
+- Greek and Cyrillic characters from the original Tofu font substitute have been used without modification.
+- The Togoshi Gothic and Togoshi Mincho fonts are proportional fonts, with only the alphanumeric characters being proportional in the Togoshi Gothic font.
+- The Togoshi Mono font is a monospaced version of the Togoshi Gothic font.
+
+Please note that the Togoshi fonts are works in progress and have not been thoroughly tested. We do not provide any guarantees regarding their operation or performance.
+
+For more information about the Togoshi fonts and the latest updates, please visit the Togoshi Font Project's homepage on OSDN:
+https://osdn.net/projects/togoshi-font/
