@@ -115,26 +115,24 @@ pub fn generate_kanji_image(
 pub fn generate_ascii_text(
     text: &str,
     font: &str,
-    min_width: u32,
+    min_height: u32,
     braille_offset: u32,
 ) -> Result<String, Box<dyn Error>> {
     let image = generate_kanji_image(text, font)?;
     let dynamic_image = image::DynamicImage::ImageRgba8(image);
     let terminal_width = terminal_size().map(|(Width(w), _)| w as u32).unwrap_or(80);
-    let width = min_width.min(terminal_width);
-    let block_image = binary_image_to_block_art(&dynamic_image, width, 32);
-    let braille_image = binary_image_to_braille_art(&dynamic_image, width, 32);
     Ok(binary_image_to_braille_block_art(
         &dynamic_image,
-        width,
+        terminal_width,
+        min_height,
         braille_offset,
     ))
 }
 
 fn binary_image_to_braille_art(
     image: &image::DynamicImage,
-    mut width: u32,
-    max_height: u32,
+    max_width: u32,
+    min_height: u32,
 ) -> String {
     let charset: &[&str] = &[
         " ", "⠁", "⠂", "⠃", "⠄", "⠅", "⠆", "⠇", "⠈", "⠉", "⠊", "⠋", "⠌", "⠍", "⠎", "⠏", "⠐", "⠑",
@@ -158,22 +156,21 @@ fn binary_image_to_braille_art(
     let (image_width, image_height) = grayscale_image.dimensions();
 
     let aspect_ratio = image_width as f32 / image_height as f32;
-    let mut height = (width as f32 / aspect_ratio / 2.0).ceil() as u32;
-    height = height.min(max_height);
-    width = (height as f32 * aspect_ratio * 2.0).ceil() as u32;
 
-    let scale_x = image_width as f32 / (width * 2) as f32;
-    let scale_y = image_height as f32 / (height * 2) as f32;
+    let width = std::cmp::min(max_width, (aspect_ratio * min_height as f32).ceil() as u32);
+    let height = (width as f32 / aspect_ratio).ceil() as u32;
+
+    let scale_x = image_width as f32 / width as f32;
+    let scale_y = image_height as f32 / height as f32;
 
     let mut result = String::new();
 
-    for y in 0..height {
+    for y in 0..(height / 2) {
         for x in 0..width {
             let mut braille_index = 0;
-
             for i in 0..2 {
                 for j in 0..2 {
-                    let pixel_x = ((x * 2 + j) as f32 * scale_x).floor() as u32;
+                    let pixel_x = ((x + j) as f32 * scale_x).floor() as u32;
                     let pixel_y = ((y * 2 + i) as f32 * scale_y).floor() as u32;
 
                     if pixel_y < image_height
@@ -195,7 +192,8 @@ fn binary_image_to_braille_art(
 
 fn binary_image_to_block_art(
     image: &image::DynamicImage,
-    width: u32,
+    max_width: u32,
+    min_height: u32,
 ) -> String {
     let block_charset: &[&str] = &[
         " ", "▘", "▝", "▀", "▖", "▌", "▞", "▛", "▗", "▚", "▐", "▜", "▄", "▙", "▟", "█",
@@ -205,22 +203,22 @@ fn binary_image_to_block_art(
     let (image_width, image_height) = grayscale_image.dimensions();
 
     let aspect_ratio = image_width as f32 / image_height as f32;
-    let mut height = (width as f32 / aspect_ratio / 2.0).ceil() as u32;
-    height = height.min(max_height);
-    width = (height as f32 * aspect_ratio * 2.0).ceil() as u32;
 
-    let scale_x = image_width as f32 / (width * 2) as f32;
-    let scale_y = image_height as f32 / (height * 2) as f32;
+    let width = std::cmp::min(max_width, (aspect_ratio * min_height as f32).ceil() as u32);
+    let height = (width as f32 / aspect_ratio).ceil() as u32;
+
+    let scale_x = image_width as f32 / width as f32;
+    let scale_y = image_height as f32 / height as f32;
 
     let mut result = String::new();
 
-    for y in 0..height {
+    for y in 0..(height / 2) {
         for x in 0..width {
             let mut block_index = 0;
 
             for i in 0..2 {
                 for j in 0..2 {
-                    let pixel_x = ((x * 2 + j) as f32 * scale_x).floor() as u32;
+                    let pixel_x = ((x + j) as f32 * scale_x).floor() as u32;
                     let pixel_y = ((y * 2 + i) as f32 * scale_y).floor() as u32;
 
                     if pixel_y < image_height
@@ -242,12 +240,13 @@ fn binary_image_to_block_art(
 
 fn binary_image_to_braille_block_art(
     image: &image::DynamicImage,
-    width: u32,
+    mut max_width: u32,
+    min_height: u32,
     shadow_offset: u32,
 ) -> String {
-    let block_art = binary_image_to_block_art(image, width, 32);
-
-    let braille_art = binary_image_to_braille_art(image, width, 32);
+    max_width = max_width - shadow_offset;
+    let block_art = binary_image_to_block_art(image, max_width, min_height);
+    let braille_art = binary_image_to_braille_art(image, max_width, min_height);
 
     let mut result = String::new();
 
@@ -255,15 +254,17 @@ fn binary_image_to_braille_block_art(
     let braille_lines: Vec<&str> = braille_art.lines().collect();
     let mut braille_char: char;
     let mut block_char: char;
+    let row_length = block_lines[0].len() + shadow_offset as usize;
+    let num_rows = block_lines.len() + shadow_offset as usize;
 
-    for i in 0..(block_lines.len() + shadow_offset as usize) {
-        for j in 0..(block_lines[i].len() + shadow_offset as usize) {
+    for i in 0..num_rows {
+        for j in 0..row_length {
             if i >= block_lines.len() || j >= block_lines[i].len() {
                 block_char = ' ';
             } else {
                 block_char = block_lines[i].chars().nth(j).unwrap_or(' ');
             }
-            if i > shadow_offset as usize || j > shadow_offset as usize {
+            if i >= shadow_offset as usize && j >= shadow_offset as usize {
                 braille_char = braille_lines[i - shadow_offset as usize]
                     .chars()
                     .nth(j - shadow_offset as usize)
@@ -271,6 +272,7 @@ fn binary_image_to_braille_block_art(
             } else {
                 braille_char = ' ';
             }
+
             if block_char == ' ' {
                 result.push(braille_char);
             } else {
