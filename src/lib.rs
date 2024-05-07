@@ -3,6 +3,7 @@ use rusttype::{Font, Scale};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs;
+use terminal_size::{terminal_size, Width};
 
 const FONT_DIR: &str = "./assets/fonts";
 
@@ -49,12 +50,6 @@ fn load_font(
         }
         None => Err(format!("Font '{}' not found", font).into()),
     }
-}
-
-pub fn generate_ascii_text(kanji: &str, font: &str, width: u32) -> Result<String, Box<dyn Error>> {
-    let image = generate_kanji_image(kanji, font)?;
-    let dynamic_image = image::DynamicImage::ImageRgba8(image);
-    Ok(binary_image_to_braille_block_art(&dynamic_image, width))
 }
 
 pub fn generate_kanji_image(
@@ -117,6 +112,25 @@ pub fn generate_kanji_image(
     Ok(image)
 }
 
+pub fn generate_ascii_text(
+    text: &str,
+    font: &str,
+    min_width: u32,
+    braille_offset: u32,
+) -> Result<String, Box<dyn Error>> {
+    let image = generate_kanji_image(text, font)?;
+    let dynamic_image = image::DynamicImage::ImageRgba8(image);
+    let terminal_width = terminal_size().map(|(Width(w), _)| w as u32).unwrap_or(80);
+    let width = min_width.min(terminal_width);
+    let block_image = binary_image_to_block_art(&dynamic_image, width, 32);
+    let braille_image = binary_image_to_braille_art(&dynamic_image, width, 32);
+    Ok(binary_image_to_braille_block_art(
+        &dynamic_image,
+        width,
+        braille_offset,
+    ))
+}
+
 fn binary_image_to_braille_art(
     image: &image::DynamicImage,
     mut width: u32,
@@ -149,7 +163,7 @@ fn binary_image_to_braille_art(
     width = (height as f32 * aspect_ratio * 2.0).ceil() as u32;
 
     let scale_x = image_width as f32 / (width * 2) as f32;
-    let scale_y = image_height as f32 / (height * 4) as f32;
+    let scale_y = image_height as f32 / (height * 2) as f32;
 
     let mut result = String::new();
 
@@ -157,10 +171,10 @@ fn binary_image_to_braille_art(
         for x in 0..width {
             let mut braille_index = 0;
 
-            for i in 0..4 {
+            for i in 0..2 {
                 for j in 0..2 {
                     let pixel_x = ((x * 2 + j) as f32 * scale_x).floor() as u32;
-                    let pixel_y = ((y * 4 + i) as f32 * scale_y).floor() as u32;
+                    let pixel_y = ((y * 2 + i) as f32 * scale_y).floor() as u32;
 
                     if pixel_y < image_height
                         && pixel_x < image_width
@@ -181,8 +195,7 @@ fn binary_image_to_braille_art(
 
 fn binary_image_to_block_art(
     image: &image::DynamicImage,
-    mut width: u32,
-    max_height: u32,
+    width: u32,
 ) -> String {
     let block_charset: &[&str] = &[
         " ", "▘", "▝", "▀", "▖", "▌", "▞", "▛", "▗", "▚", "▐", "▜", "▄", "▙", "▟", "█",
@@ -227,29 +240,44 @@ fn binary_image_to_block_art(
     result
 }
 
-fn binary_image_to_braille_block_art(image: &image::DynamicImage, width: u32) -> String {
+fn binary_image_to_braille_block_art(
+    image: &image::DynamicImage,
+    width: u32,
+    shadow_offset: u32,
+) -> String {
     let block_art = binary_image_to_block_art(image, width, 32);
+
     let braille_art = binary_image_to_braille_art(image, width, 32);
 
     let mut result = String::new();
 
     let block_lines: Vec<&str> = block_art.lines().collect();
     let braille_lines: Vec<&str> = braille_art.lines().collect();
+    let mut braille_char: char;
+    let mut block_char: char;
 
-    for (block_line, braille_line) in block_lines.iter().zip(braille_lines.iter()) {
-        let mut line = String::new();
-
-        for (block_char, braille_char) in block_line.chars().zip(braille_line.chars()) {
-            if block_char == ' ' {
-                line.push(braille_char);
+    for i in 0..(block_lines.len() + shadow_offset as usize) {
+        for j in 0..(block_lines[i].len() + shadow_offset as usize) {
+            if i >= block_lines.len() || j >= block_lines[i].len() {
+                block_char = ' ';
             } else {
-                line.push(block_char);
+                block_char = block_lines[i].chars().nth(j).unwrap_or(' ');
+            }
+            if i > shadow_offset as usize || j > shadow_offset as usize {
+                braille_char = braille_lines[i - shadow_offset as usize]
+                    .chars()
+                    .nth(j - shadow_offset as usize)
+                    .unwrap_or(' ');
+            } else {
+                braille_char = ' ';
+            }
+            if block_char == ' ' {
+                result.push(braille_char);
+            } else {
+                result.push(block_char);
             }
         }
-
-        result.push_str(&line);
         result.push('\n');
     }
-
     result
 }
