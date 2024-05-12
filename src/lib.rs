@@ -5,7 +5,7 @@ use std::error::Error;
 use std::fs;
 use terminal_size::{terminal_size, Width};
 
-const FONT_DIR: &str = "./assets/fonts";
+const FONT_DIR: &str = "/assets/fonts";
 
 fn generate_font_dict() -> HashMap<String, String> {
     fs::read_dir(FONT_DIR)
