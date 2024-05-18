@@ -1,65 +1,16 @@
 use image::{Rgba, RgbaImage};
-use rusttype::{Font, Scale};
-use std::collections::HashMap;
+use rusttype::Scale;
 use std::error::Error;
-use std::fs;
 use terminal_size::{terminal_size, Width};
 
-const FONT_DIR: &str = "./assets/fonts";
+mod fonts;
+use fonts::{get_font_path, load_font};
 
-fn generate_font_dict() -> HashMap<String, String> {
-    fs::read_dir(FONT_DIR)
-        .expect("Failed to read font directory")
-        .flat_map(|entry| {
-            let path = entry.expect("Failed to get entry path").path();
-            if path.is_dir() {
-                fs::read_dir(path).expect("Failed to read subdirectory")
-            } else {
-                fs::read_dir(path).unwrap_or_else(|_| {
-                    fs::read_dir(FONT_DIR).expect("Failed to read font directory")
-                })
-            }
-        })
-        .filter_map(|entry| {
-            let path = entry.expect("Failed to get entry path").path();
-            if path.is_file() && path.extension().map_or(false, |ext| ext == "ttf") {
-                path.file_stem()
-                    .and_then(|stem| stem.to_str())
-                    .map(|font_name| (font_name.to_string(), path.to_str().unwrap().to_string()))
-            } else {
-                None
-            }
-        })
-        .collect()
-}
-
-fn load_font(
-    font: &str,
-    font_dict: HashMap<String, String>,
-) -> Result<Font<'static>, Box<dyn Error>> {
-    let font_path = font_dict
-        .iter()
-        .find(|(name, _)| name == &font)
-        .map(|(_, path)| path);
-
-    match font_path {
-        Some(path) => {
-            let font_data = std::fs::read(path)?;
-            let font = Font::try_from_vec(font_data).ok_or("Error constructing font")?;
-            Ok(font)
-        }
-        None => Err(format!("Font '{}' not found", font).into()),
-    }
-}
-
-pub fn generate_kanji_image(
-    kanji: &str,
-    font: &str,
-) -> Result<RgbaImage, Box<dyn std::error::Error>> {
+pub fn generate_kanji_image(kanji: &str, font: &str) -> Result<RgbaImage, Box<dyn Error>> {
     // Load the OpenType font from file
     let scale = Scale::uniform(64.0);
-    let font_dict = generate_font_dict();
-    let font = load_font(font, font_dict).unwrap();
+    let font_path = get_font_path(font);
+    let font = load_font(&font_path);
 
     // Measure the dimensions of the text
     let v_metrics = font.v_metrics(scale);
@@ -112,28 +63,18 @@ pub fn generate_kanji_image(
     Ok(image)
 }
 
-pub fn generate_ascii_text(
-    text: &str,
-    font: &str,
-    min_height: u32,
-    braille_offset: u32,
-) -> Result<String, Box<dyn Error>> {
-    let image = generate_kanji_image(text, font)?;
-    let dynamic_image = image::DynamicImage::ImageRgba8(image);
-    let terminal_width = terminal_size().map(|(Width(w), _)| w as u32).unwrap_or(80);
-    Ok(binary_image_to_braille_block_art(
-        &dynamic_image,
-        terminal_width,
-        min_height,
-        braille_offset,
-    ))
+pub fn generate_ascii_text(text: &str, font: &str, min_height: u32, braille_offset: u32) -> String {
+    let image = generate_kanji_image(text, font);
+    let dynamic_image = image::DynamicImage::ImageRgba8(image.unwrap());
+    let terminal_width = terminal_size().map(|(Width(w), _)| w as u32).unwrap();
+    binary_image_to_braille_block_art(&dynamic_image, terminal_width, min_height, braille_offset)
 }
 
 fn binary_image_to_braille_art(
     image: &image::DynamicImage,
     max_width: u32,
     min_height: u32,
-) -> String {
+) -> Vec<Vec<char>> {
     let charset: &[&str] = &[
         " ", "⠁", "⠂", "⠃", "⠄", "⠅", "⠆", "⠇", "⠈", "⠉", "⠊", "⠋", "⠌", "⠍", "⠎", "⠏", "⠐", "⠑",
         "⠒", "⠓", "⠔", "⠕", "⠖", "⠗", "⠘", "⠙", "⠚", "⠛", "⠜", "⠝", "⠞", "⠟", "⠠", "⠡", "⠢", "⠣",
@@ -163,9 +104,10 @@ fn binary_image_to_braille_art(
     let scale_x = image_width as f32 / width as f32;
     let scale_y = image_height as f32 / height as f32;
 
-    let mut result = String::new();
+    let mut result: Vec<Vec<char>> = Vec::new();
 
     for y in 0..(height / 2) {
+        let mut row: Vec<char> = Vec::new();
         for x in 0..width {
             let mut braille_index = 0;
             for i in 0..2 {
@@ -181,12 +123,10 @@ fn binary_image_to_braille_art(
                     }
                 }
             }
-
-            result.push_str(charset[braille_index]);
+            row.push(charset[braille_index].chars().nth(0).unwrap());
         }
-        result.push('\n');
+        result.push(row);
     }
-
     result
 }
 
@@ -194,7 +134,7 @@ fn binary_image_to_block_art(
     image: &image::DynamicImage,
     max_width: u32,
     min_height: u32,
-) -> String {
+) -> Vec<Vec<char>> {
     let block_charset: &[&str] = &[
         " ", "▘", "▝", "▀", "▖", "▌", "▞", "▛", "▗", "▚", "▐", "▜", "▄", "▙", "▟", "█",
     ];
@@ -210,9 +150,10 @@ fn binary_image_to_block_art(
     let scale_x = image_width as f32 / width as f32;
     let scale_y = image_height as f32 / height as f32;
 
-    let mut result = String::new();
+    let mut result = Vec::new();
 
     for y in 0..(height / 2) {
+        let mut row: Vec<char> = Vec::new();
         for x in 0..width {
             let mut block_index = 0;
 
@@ -230,11 +171,10 @@ fn binary_image_to_block_art(
                 }
             }
 
-            result.push_str(block_charset[block_index]);
+            row.push(block_charset[block_index].chars().nth(0).unwrap());
         }
-        result.push('\n');
+        result.push(row);
     }
-
     result
 }
 
@@ -244,14 +184,12 @@ fn binary_image_to_braille_block_art(
     min_height: u32,
     shadow_offset: u32,
 ) -> String {
-    max_width = max_width - shadow_offset;
+    max_width = (max_width - shadow_offset) - 5;
     let block_art = binary_image_to_block_art(image, max_width, min_height);
     let braille_art = binary_image_to_braille_art(image, max_width, min_height);
-
     let mut result = String::new();
-
-    let block_lines: Vec<&str> = block_art.lines().collect();
-    let braille_lines: Vec<&str> = braille_art.lines().collect();
+    let block_lines: Vec<Vec<char>> = block_art;
+    let braille_lines: Vec<Vec<char>> = braille_art;
     let mut braille_char: char;
     let mut block_char: char;
     let row_length = block_lines[0].len() + shadow_offset as usize;
@@ -262,13 +200,10 @@ fn binary_image_to_braille_block_art(
             if i >= block_lines.len() || j >= block_lines[i].len() {
                 block_char = ' ';
             } else {
-                block_char = block_lines[i].chars().nth(j).unwrap_or(' ');
+                block_char = block_lines[i][j];
             }
-            if i >= shadow_offset as usize && j >= shadow_offset as usize {
-                braille_char = braille_lines[i - shadow_offset as usize]
-                    .chars()
-                    .nth(j - shadow_offset as usize)
-                    .unwrap_or(' ');
+            if i > shadow_offset as usize && j > shadow_offset as usize {
+                braille_char = braille_lines[i - shadow_offset as usize][j - shadow_offset as usize]
             } else {
                 braille_char = ' ';
             }

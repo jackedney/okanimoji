@@ -9,7 +9,9 @@ include = ["src/**/*", "assets/**/*"]
 [dependencies]
 image = "0.24.1"
 image_ascii = "0.1.1"
+include_dir = "0.7.3"
 kanji = "2.0.0"
 rascii_art = "0.4.5"
 rusttype = "0.9.3"
 terminal_size = "0.3.0"
+toml = "0.8.13"

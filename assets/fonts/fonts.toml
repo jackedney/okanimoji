@@ -1,0 +1,22 @@
+[fonts]
+
+# Migu
+migu-bold = "migu/migu-bold.ttf"
+migu-regular = "migu/migu-regular.ttf"
+
+# Noto Sans
+noto-regular = "noto_sans/noto-regular.ttf"
+noto-medium = "noto_sans/noto-medium.ttf"
+noto-thin = "noto_sans/noto-thin.ttf"
+
+# Shippori Mincho
+shippori_mincho-black = "shippori_mincho/shippori_mincho-black.ttf"
+shippori_mincho-extrabold = "shippori_mincho/shippori_mincho-extrabold.ttf"
+shippori_mincho-extralight = "shippori_mincho/shippori_mincho-extralight.ttf"
+shippori_mincho-medium = "shippori_mincho/shippori_mincho-medium.ttf"
+shippori_mincho-semibold = "shippori_mincho/shippori_mincho-semibold.ttf"
+
+# Togoshi
+togoshi-gothic = "togoshi/togoshi-gothic.ttf"
+togoshi-mincho = "togoshi/togoshi-mincho.ttf"
+togoshi-mono = "togoshi/togoshi-mono.ttf"
