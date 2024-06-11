@@ -218,3 +218,12 @@ fn binary_image_to_braille_block_art(
     }
     result
 }
+
+pub fn generate_ascii_image(
+    image: &image::DynamicImage,
+    max_width: u32,
+    min_height: u32,
+    shadow_offset: u32,
+) -> String {
+    return binary_image_to_braille_block_art(image, max_width, min_height, shadow_offset);
+}
